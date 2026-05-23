@@ -1,0 +1,37 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "IMX Workflow State",
+  "description": "Schema for workflow/state.json per IMX spec §10.5",
+  "type": "object",
+  "required": ["schema_version", "workflow_id", "lifecycle"],
+  "properties": {
+    "schema_version": {"type": "string", "const": "0.6"},
+    "workflow_id": {"type": "string"},
+    "definition_ref": {"type": "string"},
+    "current_step": {"type": "string"},
+    "attempt_count": {"type": "integer", "minimum": 0},
+    "iteration_count": {"type": "integer", "minimum": 0},
+    "lifecycle": {
+      "type": "string",
+      "enum": ["pending", "running", "blocked", "retrying", "succeeded", "failed", "compensating", "cancelled"]
+    },
+    "blocked_reason": {"type": "string"},
+    "resume_token": {"type": "string"},
+    "started_at": {"type": "string", "format": "date-time"},
+    "updated_at": {"type": "string", "format": "date-time"},
+    "completed_at": {"type": "string", "format": "date-time"},
+    "step_history": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "step_id": {"type": "string"},
+          "outcome": {"type": "string", "enum": ["succeeded", "failed", "skipped", "compensated"]},
+          "started_at": {"type": "string"},
+          "completed_at": {"type": "string"},
+          "task_id": {"type": "string"}
+        }
+      }
+    }
+  }
+}

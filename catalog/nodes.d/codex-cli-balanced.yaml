@@ -1,0 +1,30 @@
+schema_version: "0.6"
+node_id: "balanced@codex/implementer"
+
+engine:
+  family: balanced
+  provider: openai
+  model: codex-cli
+  provider_class: remote
+  cost_band: medium
+
+harness:
+  kind: cli
+  binary: codex
+  version_fingerprint: placeholder
+  tool_coverage_tier: 2
+  supports_pre_tool_guidance: false
+  supports_task_handle: false
+  supports_interactive_control: false
+
+profile: balanced
+
+policy:
+  allowed_risk_tiers: [READ_ONLY, LOCAL]
+  capability_tags:
+    - implementation
+    - bash_execution
+    - test_writing
+  correlation_group: openai-cloud
+
+notes: "OpenAI Codex CLI. Good for implementation, bash execution."

@@ -1,0 +1,39 @@
+schema_version: "0.6"
+profile_id: economy
+description: "Cheap first-pass triage, classification, and summarization. Hard budget cap enforces cost discipline. No write operations permitted."
+capability_band: economy
+
+allow:
+  - read_file
+  - bash_readonly
+
+deny:
+  - edit_file
+  - write_file
+  - git_add
+  - git_commit
+  - git_push
+  - publish
+  - production_write
+  - deploy
+  - bash
+
+risk_tiers:
+  - READ_ONLY
+
+budget_gate: hard
+budget:
+  max_cost_usd: 0.10
+  max_tokens: 20000
+
+approval_required_for: []
+
+task_classes:
+  - analysis
+  - analysis.search
+  - analysis.summarization
+  - routing
+  - routing.decomposition
+  - memory_retrieval
+
+log_decisions_to: "~/.imx/telemetry/gate_decisions.jsonl"

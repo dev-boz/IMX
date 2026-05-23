@@ -1,0 +1,62 @@
+schema_version: "0.6"
+profile_id: implementer
+description: "General implementation work: feature development, bugfixes, refactoring, and migration steps. Confined to local filesystem and version control; no external push or deploy."
+capability_band: balanced
+
+allow:
+  - read_file
+  - edit_file
+  - bash
+  - git_add
+  - git_commit
+  - git_diff
+  - git_status
+
+deny:
+  - git_push
+  - publish
+  - production_write
+  - deploy
+
+risk_tiers:
+  - READ_ONLY
+  - LOCAL
+
+budget_gate: soft
+budget:
+  max_cost_usd: 1.00
+  max_tokens: 200000
+
+approval_required_for:
+  - EXTERNAL
+
+pre_tool_hooks:
+  - name: migration-delete-guard
+    tool_pattern: "bash|edit_file"
+    script: "~/.imx/catalog/guardrails/no_delete_migrations.sh"
+    on_fail: DENY
+  - name: no-drop-table-guard
+    tool_pattern: "bash|edit_file"
+    script: "~/.imx/catalog/guardrails/no_drop_table.sh"
+    on_fail: DENY
+
+advisor_gates:
+  - stage: plan
+    advisor_profile: deep
+    min_risk_tier: LOCAL
+  - stage: pre_commit
+    advisor_profile: deep
+    min_risk_tier: LOCAL
+
+task_classes:
+  - implementation
+  - implementation.feature
+  - implementation.bugfix
+  - implementation.refactor
+  - implementation.migration
+  - test_writing
+  - bash_execution
+  - bash_execution.build
+  - documentation
+
+log_decisions_to: "~/.imx/telemetry/gate_decisions.jsonl"

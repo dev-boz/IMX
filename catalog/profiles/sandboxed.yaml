@@ -1,0 +1,66 @@
+schema_version: "0.6"
+profile_id: sandboxed
+description: "Risky or externally-scoped actions requiring isolated execution. Full audit trail mandatory. All EXTERNAL-tier operations require explicit approval. Worktree isolation enforced by the shim."
+capability_band: sandboxed
+
+sandbox_required: true
+worktree_required: true
+
+allow:
+  - read_file
+  - edit_file
+  - bash
+  - git_add
+  - git_commit
+  - git_diff
+  - git_log
+  - git_status
+  - git_push
+  - publish
+  - deploy
+
+deny:
+  - production_write
+
+risk_tiers:
+  - READ_ONLY
+  - LOCAL
+  - EXTERNAL
+
+budget_gate: hard
+budget:
+  max_cost_usd: 2.00
+  max_tokens: 200000
+
+approval_required_for:
+  - EXTERNAL
+
+pre_tool_hooks:
+  - name: sandbox-audit-logger
+    tool_pattern: "bash|edit_file|git_push|publish|deploy"
+    script: "~/.imx/catalog/guardrails/sandbox_audit_log.sh"
+    on_fail: DENY
+  - name: external-approval-check
+    tool_pattern: "git_push|publish|deploy"
+    script: "~/.imx/catalog/guardrails/require_external_approval.sh"
+    on_fail: DENY
+
+advisor_gates:
+  - stage: plan
+    advisor_profile: frontier
+    min_risk_tier: EXTERNAL
+  - stage: pre_commit
+    advisor_profile: deep
+    min_risk_tier: LOCAL
+  - stage: final_verdict
+    advisor_profile: frontier
+    min_risk_tier: EXTERNAL
+
+task_classes:
+  - deployment
+  - deployment.git_push
+  - deployment.publish
+  - bash_execution
+  - bash_execution.local_deploy
+
+log_decisions_to: "~/.imx/telemetry/gate_decisions.jsonl"

@@ -1,0 +1,60 @@
+schema_version: "0.6"
+profile_id: deep
+description: "Complex reasoning, long tasks, architecture decisions, and pre-mortem analysis. Higher budget limits accommodate extended context and multi-step synthesis. Advisor gates fire before plan commitment and before commit."
+capability_band: deep
+
+allow:
+  - read_file
+  - edit_file
+  - bash
+  - git_add
+  - git_commit
+  - git_diff
+  - git_log
+  - git_status
+  - bash_readonly
+
+deny:
+  - git_push
+  - publish
+  - production_write
+  - deploy
+
+risk_tiers:
+  - READ_ONLY
+  - LOCAL
+
+budget_gate: soft
+budget:
+  max_cost_usd: 5.00
+  max_tokens: 500000
+
+approval_required_for:
+  - EXTERNAL
+
+advisor_gates:
+  - stage: plan
+    advisor_profile: frontier
+    min_risk_tier: LOCAL
+  - stage: pre_commit
+    advisor_profile: deep
+    min_risk_tier: LOCAL
+
+task_classes:
+  - architecture_decision
+  - architecture_decision.adr
+  - analysis
+  - analysis.diagnosis
+  - planning
+  - planning.pre_mortem
+  - evaluation
+  - evaluation.debate
+  - code_review
+  - code_review.security
+  - code_review.performance
+  - implementation
+  - implementation.refactor
+  - implementation.migration
+  - documentation.spec
+
+log_decisions_to: "~/.imx/telemetry/gate_decisions.jsonl"

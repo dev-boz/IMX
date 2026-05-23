@@ -1,0 +1,33 @@
+schema_version: "0.6"
+node_id: "frontier@claude-code/deep"
+
+engine:
+  family: frontier
+  provider: anthropic
+  model: claude-opus-4-7
+  provider_class: remote
+  cost_band: high
+  context_band: xl
+  context_window_tokens: 200000
+
+harness:
+  kind: cli
+  binary: claude
+  version_fingerprint: placeholder
+  tool_coverage_tier: 1
+  supports_pre_tool_guidance: true
+  supports_task_handle: false
+  supports_interactive_control: true
+
+profile: deep
+
+policy:
+  allowed_risk_tiers: [READ_ONLY, LOCAL]
+  capability_tags:
+    - architecture_decision
+    - analysis.diagnosis
+    - evaluation.debate
+    - planning
+  correlation_group: anthropic-cloud
+
+notes: "Frontier advisor / deep reviewer. Use for architecture decisions, pre-mortems, adversarial review."

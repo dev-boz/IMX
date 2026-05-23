@@ -1,0 +1,33 @@
+schema_version: "0.6"
+node_id: "balanced@gemini-cli/balanced"
+
+engine:
+  family: balanced
+  provider: google
+  model: gemini-2.5-flash
+  provider_class: remote
+  cost_band: low
+  context_band: huge
+  context_window_tokens: 1000000
+
+harness:
+  kind: cli
+  binary: gemini
+  version_fingerprint: placeholder
+  tool_coverage_tier: 2
+  supports_pre_tool_guidance: false
+  supports_task_handle: false
+  supports_interactive_control: false
+
+profile: balanced
+
+policy:
+  allowed_risk_tiers: [READ_ONLY, LOCAL]
+  capability_tags:
+    - analysis
+    - summarization
+    - long_context
+    - documentation
+  correlation_group: google-cloud
+
+notes: "Large context window. Good for summarization and long document analysis."

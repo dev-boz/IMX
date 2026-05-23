@@ -1,0 +1,61 @@
+schema_version: "0.6"
+profile_id: balanced
+description: "General-purpose balanced profile for implementation, review, documentation, and test writing. Suitable for the majority of routine tasks. Confines changes to local filesystem and version control."
+capability_band: balanced
+
+allow:
+  - read_file
+  - edit_file
+  - bash
+  - git_add
+  - git_commit
+  - git_diff
+  - git_log
+  - git_status
+  - bash_readonly
+
+deny:
+  - git_push
+  - publish
+  - production_write
+  - deploy
+
+risk_tiers:
+  - READ_ONLY
+  - LOCAL
+
+budget_gate: soft
+budget:
+  max_cost_usd: 1.00
+  max_tokens: 200000
+
+approval_required_for:
+  - EXTERNAL
+
+exploration:
+  traffic_pct: 10
+  max_tasks: 20
+  max_days: 7
+  stop_when_confidence_gte: 0.90
+
+task_classes:
+  - analysis
+  - analysis.search
+  - analysis.summarization
+  - analysis.diagnosis
+  - code_review
+  - implementation
+  - implementation.feature
+  - implementation.bugfix
+  - implementation.refactor
+  - test_writing
+  - bash_execution
+  - bash_execution.build
+  - documentation
+  - documentation.spec
+  - documentation.changelog
+  - routing
+  - memory_retrieval
+  - memory_consolidation
+
+log_decisions_to: "~/.imx/telemetry/gate_decisions.jsonl"

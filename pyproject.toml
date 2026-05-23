@@ -1,0 +1,16 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "imx"
+version = "0.6.0"
+description = "Inference Mesh Exchange — filesystem-first routing and governance for agent fleets"
+requires-python = ">=3.11"
+dependencies = ["pyyaml>=6.0", "jsonschema>=4.0"]
+
+[project.scripts]
+imx = "imx.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["imx"]

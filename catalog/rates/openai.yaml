@@ -1,0 +1,30 @@
+schema_version: "0.6"
+provider: openai
+description: "OpenAI API token rates."
+models:
+  gpt-4.1:
+    capability_band: frontier
+    input_per_million_usd: 2.00
+    output_per_million_usd: 8.00
+    cache_read_per_million_usd: 0.50
+    context_window_tokens: 1000000
+    effective_from: "2025-04-01"
+  gpt-4.1-mini:
+    capability_band: balanced
+    input_per_million_usd: 0.40
+    output_per_million_usd: 1.60
+    cache_read_per_million_usd: 0.10
+    context_window_tokens: 1000000
+    effective_from: "2025-04-01"
+  o3:
+    capability_band: frontier
+    input_per_million_usd: 10.00
+    output_per_million_usd: 40.00
+    context_window_tokens: 200000
+    effective_from: "2025-04-01"
+  o4-mini:
+    capability_band: deep
+    input_per_million_usd: 1.10
+    output_per_million_usd: 4.40
+    context_window_tokens: 200000
+    effective_from: "2025-04-01"

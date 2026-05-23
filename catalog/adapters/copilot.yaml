@@ -1,0 +1,49 @@
+schema_version: "0.6"
+adapter_id: copilot
+harness: copilot-cli
+binary: copilot
+description: >
+  Adapter for GitHub Copilot CLI. Economy-class routing and quick analysis.
+  Best for triage, classification, and read-only review tasks.
+
+injection:
+  command_template: "{message}"
+  max_injection_bytes: 1024
+  inject_at: pre_task
+
+control_intents:
+  compact:
+    supported: false
+  rewind:
+    supported: false
+  clear:
+    supported: false
+  switch_model:
+    supported: false
+  pause:
+    supported: false
+  resume:
+    supported: false
+
+fingerprint:
+  source: "binary_version"
+  command: "copilot --version"
+  pattern: "(?P<version>[\\d.]+)"
+
+tool_coverage_tier: 3
+supports_pre_tool_guidance: false
+supports_task_handle: false
+supports_interactive_control: false
+elicitation_supported: false
+context_headroom_tokens: 2048
+
+health_probe:
+  command: "copilot --version"
+  timeout_ms: 5000
+
+capability_tags:
+  - analysis
+  - code_review
+  - routing
+
+correlation_group: openai-cloud

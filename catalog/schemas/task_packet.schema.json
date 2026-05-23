@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "imx:task_packet:0.6",
+  "title": "IMX Task Packet",
+  "description": "Formal routing contract for a unit of work dispatched through IMX. The canonical file is ~/.imx/catalog/schemas/task_packet.schema.json.",
+  "type": "object",
+  "required": ["schema_version", "task_id", "task_class", "risk_tier"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "0.6"
+    },
+    "task_id": {
+      "type": "string",
+      "description": "Unique stable identifier for this task. Should include idempotency key when applicable."
+    },
+    "task_class": {
+      "type": "string",
+      "description": "Operator-defined dotted task-class string from ~/.imx/catalog/task_classes.yaml."
+    },
+    "risk_tier": {
+      "type": "string",
+      "enum": ["READ_ONLY", "LOCAL", "EXTERNAL"],
+      "description": "Highest applicable risk tier for this task. Gates execution regardless of capability."
+    },
+    "relationship": {
+      "type": "string",
+      "enum": ["root", "subtask", "workflow_step", "advisory", "review"],
+      "description": "Relationship of this task to the originating request."
+    },
+    "instructions": {
+      "type": "string",
+      "description": "Inline instruction payload. Use instructions_ref instead for long or file-backed tasks."
+    },
+    "instructions_ref": {
+      "type": "string",
+      "description": "Path or URI to instruction file. Prefer this for tasks that reference repo files or shared prompts."
+    },
+    "budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_cost_usd": { "type": "number", "minimum": 0 },
+        "max_tokens": { "type": "integer", "minimum": 0 },
+        "gate_mode": {
+          "type": "string",
+          "enum": ["soft", "hard"],
+          "description": "soft = warn and prefer cheaper route; hard = deny when exhausted."
+        }
+      }
+    },
+    "capability_profile": {
+      "type": "string",
+      "description": "Profile ID from ~/.imx/catalog/profiles/*.yaml. Governs allowed tools, risk tiers, and guardrails."
+    },
+    "node_id": {
+      "type": "string",
+      "description": "Resolved node identifier (engine × harness × profile). Written by the router at dispatch time."
+    },
+    "worktree": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "path": { "type": "string", "description": "Path to provisioned worktree, e.g. .worktrees/{task_id}/" },
+        "base_branch": { "type": "string" },
+        "cleanup_policy": { "type": "string", "enum": ["auto", "manual", "on_success"] }
+      }
+    },
+    "workflow_step": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "workflow_id": { "type": "string" },
+        "step_id": { "type": "string" },
+        "idempotency_key": { "type": "string" }
+      }
+    },
+    "memory_refs": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "gitmem procedure paths, route card refs, or other durable memory injected into context."
+    },
+    "context_refs": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Runtime context sources: summaries, transcripts, briefings, onboarding units."
+    },
+    "approval_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "required": { "type": "boolean" },
+        "approval_ref": { "type": "string", "description": "Path to ~/.imx/state/approvals/{task_id}.json" },
+        "demo_artifact_required": { "type": "boolean" }
+      }
+    },
+    "contamination_risk": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "untrusted_sources": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Classes of untrusted input present in this task's context."
+        },
+        "sanitization_steps": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["written_by", "written_at"],
+      "properties": {
+        "written_by": { "type": "string" },
+        "written_at": { "type": "string", "format": "date-time" },
+        "source_node": { "type": "string" },
+        "harness_fingerprint": { "type": "string" },
+        "chain_depth": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Agent-to-agent hop count since the original human request."
+        },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    }
+  }
+}

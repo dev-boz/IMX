@@ -1,0 +1,51 @@
+schema_version: "0.6"
+adapter_id: gemini-cli
+harness: gemini-cli
+binary: gemini
+description: >
+  Adapter for Google Gemini CLI. 1M token context window makes it well-suited
+  for long-context analysis and summarization tasks.
+
+injection:
+  command_template: "{message}"
+  max_injection_bytes: 2048
+  inject_at: pre_task
+
+control_intents:
+  compact:
+    supported: false
+  rewind:
+    supported: false
+  clear:
+    supported: false
+  switch_model:
+    supported: false
+  pause:
+    supported: false
+  resume:
+    supported: false
+
+fingerprint:
+  source: "binary_version"
+  command: "gemini --version"
+  pattern: "(?P<version>[\\d.]+)"
+
+tool_coverage_tier: 2
+supports_pre_tool_guidance: false
+supports_task_handle: false
+supports_interactive_control: false
+elicitation_supported: false
+context_headroom_tokens: 16384
+
+health_probe:
+  command: "gemini --version"
+  timeout_ms: 5000
+
+capability_tags:
+  - analysis
+  - summarization
+  - long_context
+  - documentation
+  - code_review
+
+correlation_group: google-cloud

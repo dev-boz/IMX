@@ -1,0 +1,48 @@
+schema_version: "0.6"
+eval_type: chaos
+label: "example-chaos"
+description: >
+  Chaos injection spec for stress-testing routing decisions under adversarial conditions.
+
+# Node(s) to target in this chaos eval
+target_nodes:
+  - "*"   # wildcard = all nodes
+
+# Failure modes to inject
+injections:
+  - kind: latency_spike
+    params:
+      delay_ms: 5000
+      probability: 0.3
+    description: "Inject artificial latency to test latency-score EMA response"
+
+  - kind: quality_degradation
+    params:
+      quality_floor: 0.2
+      probability: 0.5
+    description: "Force quality scores below threshold to trigger EMA decay"
+
+  - kind: cascade_failure
+    params:
+      depth: 2
+    description: "Simulate cascade failure propagating across 2 hops"
+
+  - kind: quota_exhaustion
+    params:
+      provider: "anthropic"
+    description: "Simulate provider quota exhaustion"
+
+# How many tasks to run under chaos conditions
+sample_size: 20
+
+# Metrics to collect
+metrics:
+  - routing_accuracy       # did the router avoid the degraded node?
+  - ema_recovery_speed     # how fast does EMA recover after injections stop?
+  - fallback_activation    # did fallback chains trigger correctly?
+  - dream_trigger_rate     # were appropriate dream triggers emitted?
+
+# Pass conditions
+pass_when:
+  routing_accuracy_gte: 0.7
+  fallback_activation_rate_gte: 0.8

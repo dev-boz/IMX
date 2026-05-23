@@ -1,0 +1,141 @@
+schema_version: "0.6"
+description: "Operator-defined task-class taxonomy. Dotted names refine broader classes."
+task_classes:
+  # --- Analysis / Read-only ---
+  analysis:
+    description: "general analysis, investigation, and research"
+    risk_tier: READ_ONLY
+  analysis.search:
+    parent: analysis
+    description: "search and retrieval across files, code, or documents"
+    risk_tier: READ_ONLY
+  analysis.summarization:
+    parent: analysis
+    description: "distillation and summary generation"
+    risk_tier: READ_ONLY
+  analysis.diagnosis:
+    parent: analysis
+    description: "root cause investigation of failures or anomalies"
+    risk_tier: READ_ONLY
+  # --- Code review ---
+  code_review:
+    description: "review code for correctness, maintainability, and risk"
+    risk_tier: READ_ONLY
+  code_review.security:
+    parent: code_review
+    description: "security-focused code review"
+    risk_tier: READ_ONLY
+  code_review.performance:
+    parent: code_review
+    description: "performance and efficiency review"
+    risk_tier: READ_ONLY
+  code_review.api:
+    parent: code_review
+    description: "API contract and interface review"
+    risk_tier: READ_ONLY
+  # --- Implementation ---
+  implementation:
+    description: "local code or document changes"
+    risk_tier: LOCAL
+  implementation.feature:
+    parent: implementation
+    description: "new feature development"
+    risk_tier: LOCAL
+  implementation.bugfix:
+    parent: implementation
+    description: "defect correction"
+    risk_tier: LOCAL
+  implementation.refactor:
+    parent: implementation
+    description: "structural improvement without behaviour change"
+    risk_tier: LOCAL
+  implementation.migration:
+    parent: implementation
+    description: "data or schema migration steps"
+    risk_tier: LOCAL
+  # --- Testing ---
+  test_writing:
+    description: "authoring or extending automated test suites"
+    risk_tier: LOCAL
+  test_execution:
+    description: "running tests and interpreting results"
+    risk_tier: LOCAL
+  # --- Shell / tooling ---
+  bash_execution:
+    description: "shell/tool execution and interpretation"
+    risk_tier: LOCAL
+  bash_execution.build:
+    parent: bash_execution
+    description: "compile, lint, or package steps"
+    risk_tier: LOCAL
+  bash_execution.local_deploy:
+    parent: bash_execution
+    description: "local service start, restart, or teardown"
+    risk_tier: LOCAL
+  # --- Architecture ---
+  architecture_decision:
+    description: "system design, tradeoff, or protocol decision"
+    risk_tier: READ_ONLY
+  architecture_decision.adr:
+    parent: architecture_decision
+    description: "Architecture Decision Record authoring"
+    risk_tier: READ_ONLY
+  # --- Documentation ---
+  documentation:
+    description: "docs, specs, examples, and changelogs"
+    risk_tier: LOCAL
+  documentation.spec:
+    parent: documentation
+    description: "specification writing or revision"
+    risk_tier: LOCAL
+  documentation.changelog:
+    parent: documentation
+    description: "changelog or release note authoring"
+    risk_tier: LOCAL
+  # --- Deployment / external ---
+  deployment:
+    description: "publish, deploy, or push to remote systems"
+    risk_tier: EXTERNAL
+  deployment.git_push:
+    parent: deployment
+    description: "push commits to a remote git repository"
+    risk_tier: EXTERNAL
+  deployment.publish:
+    parent: deployment
+    description: "publish a package, artifact, or container image"
+    risk_tier: EXTERNAL
+  deployment.production:
+    parent: deployment
+    description: "production environment changes"
+    risk_tier: EXTERNAL
+  # --- Routing and orchestration ---
+  routing:
+    description: "task classification, node selection, and dispatch decisions"
+    risk_tier: READ_ONLY
+  routing.decomposition:
+    parent: routing
+    description: "breaking a complex task into atomic subtasks"
+    risk_tier: READ_ONLY
+  # --- Planning ---
+  planning:
+    description: "plan or pre-mortem before implementation or deployment"
+    risk_tier: READ_ONLY
+  planning.pre_mortem:
+    parent: planning
+    description: "failure mode analysis before committing to a plan"
+    risk_tier: READ_ONLY
+  # --- Evaluation ---
+  evaluation:
+    description: "scoring, benchmarking, and eval report authoring"
+    risk_tier: READ_ONLY
+  evaluation.debate:
+    parent: evaluation
+    description: "adversarial skeptic review"
+    risk_tier: READ_ONLY
+  # --- Memory / knowledge ---
+  memory_consolidation:
+    description: "dream pipeline, fact promotion, and procedure revision"
+    risk_tier: LOCAL
+  memory_retrieval:
+    description: "gitmem lookup, procedure injection, attention refresh"
+    risk_tier: READ_ONLY

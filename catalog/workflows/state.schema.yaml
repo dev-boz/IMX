@@ -1,0 +1,50 @@
+schema_version: "0.6"
+# Schema definition for workflow/state.json
+fields:
+  schema_version:
+    type: string
+    required: true
+  workflow_id:
+    type: string
+    required: true
+  definition_ref:
+    type: string
+    description: "Path to definition.yaml relative to workspace"
+  current_step:
+    type: string
+    description: "ID of current step from definition.yaml"
+  attempt_count:
+    type: integer
+    default: 0
+  iteration_count:
+    type: integer
+    default: 0
+  lifecycle:
+    type: string
+    enum: [pending, running, blocked, retrying, succeeded, failed, compensating, cancelled]
+    required: true
+  blocked_reason:
+    type: string
+    description: "Human-readable reason if lifecycle=blocked"
+  resume_token:
+    type: string
+    description: "Opaque token for resuming after a gate or block"
+  started_at:
+    type: string
+    format: iso8601
+  updated_at:
+    type: string
+    format: iso8601
+  completed_at:
+    type: string
+    format: iso8601
+  step_history:
+    type: array
+    items:
+      type: object
+      properties:
+        step_id: {type: string}
+        outcome: {type: string, enum: [succeeded, failed, skipped, compensated]}
+        started_at: {type: string}
+        completed_at: {type: string}
+        task_id: {type: string}

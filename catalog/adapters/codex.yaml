@@ -1,0 +1,49 @@
+schema_version: "0.6"
+adapter_id: codex
+harness: codex-cli
+binary: codex
+description: >
+  Adapter for OpenAI Codex CLI. Lower tool coverage tier than claude-code;
+  no session control commands. Good for implementation and bash execution.
+
+injection:
+  command_template: "{message}"
+  max_injection_bytes: 2048
+  inject_at: pre_task
+
+control_intents:
+  compact:
+    supported: false
+  rewind:
+    supported: false
+  clear:
+    supported: false
+  switch_model:
+    supported: false
+  pause:
+    supported: false
+  resume:
+    supported: false
+
+fingerprint:
+  source: "binary_version"
+  command: "codex --version"
+  pattern: "(?P<version>[\\d.]+)"
+
+tool_coverage_tier: 2
+supports_pre_tool_guidance: false
+supports_task_handle: false
+supports_interactive_control: false
+elicitation_supported: false
+context_headroom_tokens: 4096
+
+health_probe:
+  command: "codex --version"
+  timeout_ms: 5000
+
+capability_tags:
+  - implementation
+  - bash_execution
+  - test_writing
+
+correlation_group: openai-cloud

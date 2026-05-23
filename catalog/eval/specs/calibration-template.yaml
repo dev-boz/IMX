@@ -1,0 +1,29 @@
+schema_version: "0.6"
+eval_type: calibration
+label: "example-calibration"
+description: >
+  Calibration spec for verifying that route card confidence scores match empirical outcomes.
+
+# Task class to calibrate against
+task_class: "implementation"
+
+# Minimum sample size before calibration is meaningful
+min_samples: 10
+
+# Calibration checks
+checks:
+  - name: confidence_vs_success_rate
+    description: "Cards with confidence >= 0.8 should succeed >= 70% of the time"
+    condition: "if card.confidence >= 0.8: empirical_success_rate >= 0.7"
+
+  - name: low_confidence_not_selected
+    description: "Cards with confidence < 0.3 should be selected < 10% of the time"
+    condition: "if card.confidence < 0.3: selection_rate < 0.1"
+
+  - name: ema_confidence_correlation
+    description: "EMA composite and card confidence should correlate (r >= 0.5) after 20+ observations"
+    condition: "if n >= 20: pearson_r(ema_composite, card_confidence) >= 0.5"
+
+# Drift detection
+drift_threshold: 0.15   # alert if calibration degrades by more than 15 percentage points
+drift_trigger: "procedure_regression"   # dream trigger type on drift

@@ -1,0 +1,29 @@
+schema_version: "0.6"
+eval_type: harness_survey
+label: "example-harness-survey"
+description: >
+  Harness-as-variable evaluation comparing the same engine model across different
+  harness fingerprints per IMX spec §12.4.
+
+engine: "anthropic/claude-sonnet-4-6"
+harnesses:
+  - harness_id: claude-code
+    fingerprint_query: "version_fingerprint"
+  - harness_id: opencode
+    fingerprint_query: "version_fingerprint"
+  - harness_id: aider
+    fingerprint_query: "version_fingerprint"
+
+task_class: "implementation"
+
+sample_tasks:
+  - id: "eval-task-001"
+    description: "Add a simple Python function with a docstring"
+    expected_outcome: "correct implementation with tests"
+
+metrics:
+  - quality_score
+  - token_efficiency
+  - adherence_to_conventions
+
+report_to: "~/.imx/telemetry/harness_survey_results.jsonl"

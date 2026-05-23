@@ -1,0 +1,9 @@
+.pytest_cache/
+__pycache__/
+*.py[cod]
+.venv/
+imx-resource-ledger.md
+imx-spec-v0_5_1 (2).md
+unified-spec-update-prompt.md
+url-findings-all-classified.jsonl
+reviews/

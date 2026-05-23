@@ -1,0 +1,38 @@
+schema_version: "0.6"
+name: "example-workflow"
+description: "Template for file-backed iterative workflows."
+
+budget:
+  max_cost_usd: 5.00
+  max_iterations: 10
+
+retry_policy:
+  max_retries_per_step: 2
+  backoff_seconds: 30
+  # Failure types to not retry (uncontrollable failures)
+  no_retry_on: [infrastructure, network, quota_exceeded]
+
+steps:
+  - id: plan
+    task_class: planning
+    risk_tier: READ_ONLY
+    idempotency_key: "plan-v1"
+    depends_on: []
+    max_iterations: 1
+    exit_when: "gate_approved"
+
+  - id: implement
+    task_class: implementation
+    risk_tier: LOCAL
+    idempotency_key: "impl-v1"
+    depends_on: [plan]
+    max_iterations: 5
+    exit_when: "succeeded"
+
+  - id: review
+    task_class: code_review
+    risk_tier: READ_ONLY
+    idempotency_key: "review-v1"
+    depends_on: [implement]
+    max_iterations: 3
+    exit_when: "gate_approved"

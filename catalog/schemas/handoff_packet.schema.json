@@ -1,0 +1,137 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "imx:handoff_packet:0.6",
+  "title": "IMX Handoff Packet",
+  "description": "Formal contract for agent-to-agent or agent-to-human handoffs. The canonical file is ~/.imx/catalog/schemas/handoff_packet.schema.json.",
+  "type": "object",
+  "required": ["schema_version", "handoff_id", "source_agent", "target_agent"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "0.6"
+    },
+    "handoff_id": {
+      "type": "string",
+      "description": "Unique identifier for this handoff event."
+    },
+    "task_id": {
+      "type": "string",
+      "description": "The originating task_id this handoff belongs to."
+    },
+    "source_agent": {
+      "type": "string",
+      "description": "Agent or node identity of the handing-off party."
+    },
+    "source_node_id": {
+      "type": "string",
+      "description": "Resolved node_id of the source agent at handoff time."
+    },
+    "target_agent": {
+      "type": "string",
+      "description": "Agent or node identity of the receiving party."
+    },
+    "target_node_id": {
+      "type": "string",
+      "description": "Resolved node_id of the target agent, if known at handoff time."
+    },
+    "summary": {
+      "type": "string",
+      "description": "Concise summary of completed work. Should be sanitized before handoff."
+    },
+    "summary_ref": {
+      "type": "string",
+      "description": "Path to a workspace summary file for longer summaries."
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path"],
+        "properties": {
+          "path": { "type": "string" },
+          "kind": { "type": "string", "description": "e.g. code, diff, report, demo, transcript, schema" },
+          "description": { "type": "string" }
+        }
+      }
+    },
+    "decisions": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Key decisions made during this task segment."
+    },
+    "open_questions": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Unresolved questions the receiving agent should address."
+    },
+    "next_actions": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Recommended or required actions for the receiving agent."
+    },
+    "budget_consumed": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tokens_in": { "type": "integer" },
+        "tokens_out": { "type": "integer" },
+        "estimated_cost_usd": { "type": "number" },
+        "cache_hit_rate": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "outcome": {
+      "type": "string",
+      "enum": ["succeeded", "partial", "failed", "blocked", "escalated"]
+    },
+    "failure": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Present when outcome is failed, partial, or blocked.",
+      "properties": {
+        "failure_type": {
+          "type": "string",
+          "enum": ["context_exceeded", "capability_gap", "quality_failure", "refusal", "timeout", "infrastructure", "cascade"]
+        },
+        "controllability": {
+          "type": "string",
+          "enum": ["controllable", "uncontrollable", "cascade", "unknown"]
+        },
+        "description": { "type": "string" }
+      }
+    },
+    "contamination_risk": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "untrusted_sources": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "sanitization_steps": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "sanitized": { "type": "boolean" }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["written_by", "written_at", "chain_depth"],
+      "properties": {
+        "written_by": { "type": "string" },
+        "written_at": { "type": "string", "format": "date-time" },
+        "source_node": { "type": "string" },
+        "harness_fingerprint": { "type": "string" },
+        "chain_depth": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Must be incremented from the incoming task packet's chain_depth."
+        },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    }
+  }
+}

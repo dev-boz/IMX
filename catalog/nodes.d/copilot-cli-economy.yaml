@@ -1,0 +1,30 @@
+schema_version: "0.6"
+node_id: "economy@copilot-cli/economy"
+
+engine:
+  family: balanced
+  provider: openai
+  model: gpt-4.1
+  provider_class: remote
+  cost_band: medium
+
+harness:
+  kind: cli
+  binary: copilot
+  version_fingerprint: placeholder
+  tool_coverage_tier: 3
+  supports_pre_tool_guidance: false
+  supports_task_handle: false
+  supports_interactive_control: false
+
+profile: economy
+
+policy:
+  allowed_risk_tiers: [READ_ONLY]
+  capability_tags:
+    - analysis
+    - code_review
+    - routing
+  correlation_group: openai-cloud
+
+notes: "GitHub Copilot CLI. Used for quick analysis, triage, and routing classification."

@@ -1,0 +1,50 @@
+schema_version: "0.6"
+adapter_id: kiro
+harness: kiro-cli
+binary: kiro
+description: >
+  Adapter for Kiro CLI (Sonnet-backed). Good for structured task execution
+  with spec-driven workflows.
+
+injection:
+  command_template: "{message}"
+  max_injection_bytes: 2048
+  inject_at: pre_task
+
+control_intents:
+  compact:
+    supported: false
+  rewind:
+    supported: false
+  clear:
+    supported: false
+  switch_model:
+    supported: false
+  pause:
+    supported: false
+  resume:
+    supported: false
+
+fingerprint:
+  source: "binary_version"
+  command: "kiro --version"
+  pattern: "(?P<version>[\\d.]+)"
+
+tool_coverage_tier: 2
+supports_pre_tool_guidance: false
+supports_task_handle: false
+supports_interactive_control: false
+elicitation_supported: false
+context_headroom_tokens: 4096
+
+health_probe:
+  command: "kiro --version"
+  timeout_ms: 5000
+
+capability_tags:
+  - implementation
+  - code_review
+  - documentation
+  - bash_execution
+
+correlation_group: anthropic-cloud

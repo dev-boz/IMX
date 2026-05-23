@@ -1,0 +1,31 @@
+schema_version: "0.6"
+node_id: "local-trusted@ollama/sandboxed"
+
+engine:
+  family: local-trusted
+  provider: local
+  model: ollama-local
+  provider_class: local
+  cost_band: none
+  context_band: medium
+
+harness:
+  kind: api
+  binary: ollama
+  version_fingerprint: placeholder
+  tool_coverage_tier: 4
+  supports_pre_tool_guidance: false
+  supports_task_handle: false
+  supports_interactive_control: false
+
+profile: sandboxed
+
+policy:
+  allowed_risk_tiers: [READ_ONLY, LOCAL]
+  capability_tags:
+    - local_execution
+    - privacy
+    - offline
+  correlation_group: local
+
+notes: "Local model via Ollama. Offline/privacy path. Lower capability but no quota or cost."

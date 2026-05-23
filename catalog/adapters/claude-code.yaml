@@ -1,0 +1,76 @@
+schema_version: "0.6"
+adapter_id: claude-code
+harness: claude-code
+binary: claude
+description: >
+  Adapter for Claude Code CLI (claude). Handles injection commands, session
+  control, capability detection, and harness fingerprint derivation.
+
+# How IMX injects guidance before a session starts.
+# AIP uses these when spawning or sending messages to a claude pane.
+injection:
+  command_template: "/btw {message}"
+  max_injection_bytes: 4096
+  inject_at: pre_task
+
+# Session control intents supported by this harness.
+# Maps generic IMX control-intent kinds to harness-specific commands.
+control_intents:
+  compact:
+    command: "/compact"
+    supported: true
+  rewind:
+    command: "/rewind"
+    supported: true
+  clear:
+    command: "/clear"
+    supported: true
+  switch_model:
+    command: "/model {target_model}"
+    supported: true
+  pause:
+    supported: false
+  resume:
+    supported: false
+
+# Fingerprint derivation: IMX uses this to detect harness drift.
+fingerprint:
+  source: "binary_version"
+  command: "claude --version"
+  pattern: "claude-code@(?P<version>[\\d.]+)"
+
+# Tool coverage tier (1=highest, 4=lowest).
+tool_coverage_tier: 1
+
+# Whether this harness supports pre-tool guidance injection.
+supports_pre_tool_guidance: true
+
+# Whether this harness supports task handles (async task references).
+supports_task_handle: false
+
+# Whether an orchestrator agent can control this harness interactively.
+supports_interactive_control: true
+
+# Elicitation: harness supports explicit MCP elicitation protocol.
+elicitation_supported: true
+
+# Context window headroom: how much to reserve for output.
+context_headroom_tokens: 8192
+
+# Probe command used to verify harness is available.
+health_probe:
+  command: "claude --version"
+  timeout_ms: 5000
+
+# Capability tags this harness reliably supports.
+capability_tags:
+  - implementation
+  - code_review
+  - bash_execution
+  - analysis
+  - documentation
+  - architecture_decision
+  - memory_consolidation
+
+# Correlation group for correlated-failure avoidance.
+correlation_group: anthropic-cloud

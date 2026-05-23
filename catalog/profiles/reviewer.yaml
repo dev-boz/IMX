@@ -1,0 +1,49 @@
+schema_version: "0.6"
+profile_id: reviewer
+description: "Code and document review. Strictly read-only: no writes, commits, or pushes. Uses deep capability band for thorough analysis and nuanced feedback."
+capability_band: deep
+
+allow:
+  - read_file
+  - git_diff
+  - git_log
+  - git_status
+  - bash_readonly
+
+deny:
+  - edit_file
+  - write_file
+  - git_add
+  - git_commit
+  - git_push
+  - publish
+  - production_write
+  - deploy
+  - bash
+
+risk_tiers:
+  - READ_ONLY
+
+budget_gate: soft
+budget:
+  max_cost_usd: 0.50
+  max_tokens: 100000
+
+approval_required_for: []
+
+advisor_gates:
+  - stage: final_verdict
+    advisor_profile: deep
+    min_risk_tier: READ_ONLY
+
+task_classes:
+  - code_review
+  - code_review.security
+  - code_review.performance
+  - code_review.api
+  - analysis
+  - analysis.diagnosis
+  - evaluation
+  - evaluation.debate
+
+log_decisions_to: "~/.imx/telemetry/gate_decisions.jsonl"
