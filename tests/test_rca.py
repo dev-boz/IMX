@@ -15,9 +15,14 @@ def test_classify_failure_infrastructure():
     assert result["controllability"] == "uncontrollable"
 
 
-def test_classify_failure_model_refusal():
-    result = classify_failure("model_refusal")
+def test_classify_failure_refusal():
+    result = classify_failure("refusal")
     assert result["controllability"] == "controllable"
+
+
+def test_classify_failure_timeout():
+    result = classify_failure("timeout")
+    assert result["controllability"] == "uncontrollable"
 
 
 def test_classify_failure_default():
@@ -31,7 +36,7 @@ def test_create_rca_writes_file(tmp_path):
         task_id="task-101",
         node_id="node-a",
         task_class="planning",
-        failure_type="model_refusal",
+        failure_type="refusal",
         rca_dir=rca_dir,
     )
     expected_file = rca_dir / "task-101.json"
@@ -46,7 +51,7 @@ def test_read_rca_record_roundtrip(tmp_path):
         task_id="task-202",
         node_id="node-b",
         task_class="implementation",
-        failure_type="incorrect_output",
+        failure_type="quality_failure",
         error_message="bad JSON",
         rca_dir=rca_dir,
     )
@@ -55,7 +60,7 @@ def test_read_rca_record_roundtrip(tmp_path):
     assert loaded.task_id == "task-202"
     assert loaded.node_id == "node-b"
     assert loaded.task_class == "implementation"
-    assert loaded.failure_type == "incorrect_output"
+    assert loaded.failure_type == "quality_failure"
     assert loaded.controllability == "controllable"
 
 

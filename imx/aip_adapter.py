@@ -12,6 +12,11 @@ from typing import Any
 from jsonschema import ValidationError, validate
 
 from .router import ImxRouter, RoutingRequest, RoutingResult
+from .catalog import load_profiles
+from .identity import check_identity
+from .models import GateResponse
+from .secret_scan import SecretFoundError, assert_clean
+from .telemetry import append_gate_decision
 
 DEFAULT_ROUTE_REQUESTS_DIR = "route-requests"
 DEFAULT_ROUTE_DECISIONS_DIR = "route-decisions"
@@ -56,8 +61,14 @@ def read_task_packet(
     *,
     schema_path: Path | None = None,
     catalog_root: Path | None = None,
+    scan: bool = True,
 ) -> dict[str, Any]:
-    """Load and validate a task packet against the canonical IMX schema."""
+    """Load and validate a task packet against the canonical IMX schema.
+
+    Fail-closed (spec §11.5): unless ``scan`` is False, the packet is scanned
+    for secrets and a SecretFoundError is raised if any are present, blocking
+    propagation before the next model call.
+    """
     packet = _load_json_object(packet_path, label="task packet")
     resolved_schema = schema_path or _default_task_packet_schema_path(catalog_root)
     schema = _load_json_object(resolved_schema, label="task packet schema")
@@ -67,6 +78,8 @@ def read_task_packet(
         path = list(exc.absolute_path)
         location = ".".join(str(part) for part in path) if path else "<root>"
         raise ValueError(f"task packet failed schema validation at {location}: {exc.message}") from exc
+    if scan:
+        assert_clean(packet, label="task_packet")
     return packet
 
 
@@ -77,6 +90,43 @@ class AipRouteOutcome:
     task_packet_path: Path | None
     task_packet_ref: str | None
     result: RoutingResult
+
+
+def _denied_for_secret(
+    *,
+    task_id: str,
+    route_request_path: Path,
+    task_packet_path: Path | None,
+    task_packet_ref: str | None,
+    risk_tier: str,
+    reason: str,
+    telemetry_dir: Path | None,
+) -> AipRouteOutcome:
+    """Build a DENY outcome and audit it when a boundary artifact carries a secret."""
+    append_gate_decision(
+        {
+            "route_decision_id": None,
+            "task_id": task_id,
+            "node_id": None,
+            "risk_tier": risk_tier,
+            "gate_response": GateResponse.DENY.value,
+            "reason": reason,
+            "decided_by": "imx-secret-scan",
+        },
+        telemetry_dir,
+    )
+    return AipRouteOutcome(
+        route_request_path=route_request_path,
+        decision_path=None,
+        task_packet_path=task_packet_path,
+        task_packet_ref=task_packet_ref,
+        result=RoutingResult(
+            decision=None,
+            gate_response=GateResponse.DENY,
+            gate_reason=reason,
+            errors=[reason],
+        ),
+    )
 
 
 def route_aip_task(
@@ -104,9 +154,24 @@ def route_aip_task(
         else:
             task_packet_ref = None
 
+    # Fail-closed secret scan on the boundary artifacts (spec §11.5): a secret in
+    # the route request or task packet blocks dispatch with an audited DENY
+    # rather than propagating to the next model call.
     packet: dict[str, Any] | None = None
-    if task_packet_path is not None:
-        packet = read_task_packet(task_packet_path, catalog_root=catalog_root)
+    try:
+        assert_clean(route_request, label="route_request")
+        if task_packet_path is not None:
+            packet = read_task_packet(task_packet_path, catalog_root=catalog_root)
+    except SecretFoundError as exc:
+        return _denied_for_secret(
+            task_id=task_id,
+            route_request_path=route_request_path,
+            task_packet_path=task_packet_path,
+            task_packet_ref=task_packet_ref if isinstance(task_packet_ref, str) else None,
+            risk_tier=str((route_request or {}).get("risk_tier", "")),
+            reason=str(exc),
+            telemetry_dir=telemetry_dir,
+        )
 
     provenance = packet.get("provenance", {}) if packet else {}
     if provenance and not isinstance(provenance, dict):
@@ -132,11 +197,41 @@ def route_aip_task(
         )
     )
 
+    # Identity-hygiene consistency checks (spec §12.6): compare the packet's
+    # declared identity against what IMX dispatched and audit any mismatches to
+    # gate_decisions.jsonl. Non-blocking by default (a consistency check).
+    identity_violations: list[dict[str, str]] = []
+    if packet is not None and result.decision is not None:
+        dispatched_profile_id = result.decision.profile
+        profile_obj = load_profiles(catalog_root).get(dispatched_profile_id)
+        for violation in check_identity(
+            packet,
+            dispatched_profile_id=dispatched_profile_id,
+            dispatched_node=result.decision.node_id,
+            profile=profile_obj,
+        ):
+            identity_violations.append({"kind": violation.kind, "detail": violation.detail})
+            append_gate_decision(
+                {
+                    "route_decision_id": result.decision.route_decision_id,
+                    "task_id": task_id,
+                    "node_id": result.decision.node_id,
+                    "risk_tier": result.decision.risk_tier,
+                    "profile": dispatched_profile_id,
+                    "gate_response": GateResponse.AUDIT.value,
+                    "reason": f"identity:{violation.kind}: {violation.detail}",
+                    "decided_by": "imx-identity",
+                },
+                telemetry_dir,
+            )
+
     decision_path: Path | None = None
     if result.decision is not None:
         payload = dataclasses.asdict(result.decision)
         payload["gate_response"] = result.gate_response.value
         payload["gate_reason"] = result.gate_reason
+        if identity_violations:
+            payload["identity_violations"] = identity_violations
         if task_packet_ref:
             payload["task_packet_ref"] = task_packet_ref
         if provenance:

@@ -12,7 +12,7 @@ class CapabilityBand(str, enum.Enum):
     deep = "deep"
     frontier = "frontier"
     specialist = "specialist"
-    local_trusted = "local_trusted"
+    local_trusted = "local-trusted"
     sandboxed = "sandboxed"
     distilled = "distilled"
 
@@ -76,6 +76,7 @@ class CapabilityProfile:
     budget: dict = field(default_factory=dict)
     approval_required_for: list = field(default_factory=list)
     task_classes: list = field(default_factory=list)
+    sandbox_required: bool = False  # spec §9.2: profile may mandate worktree/sandbox isolation
 
 
 @dataclass

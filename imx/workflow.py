@@ -201,3 +201,56 @@ def create_checkpoint(state: WorkflowState, checkpoints_dir: Path) -> Path:
         encoding="utf-8",
     )
     return checkpoint_path
+
+
+def write_progress_md(state: WorkflowState, output_dir: Path) -> Path:
+    """Write (or overwrite) a human-readable progress.md for the workflow.
+
+    The file is part of the required workflow directory layout per spec §10.5:
+
+        workflow/
+        ├── definition.yaml
+        ├── state.json
+        ├── progress.md     ← this file
+        ├── checkpoints/
+        └── artifacts/
+
+    It summarises lifecycle, current step, iteration count, and the step
+    history in a format that agents and operators can read at a glance.
+
+    Returns the path written.
+    """
+    lines: list[str] = [
+        f"# Workflow Progress: {state.workflow_id or '(unnamed)'}",
+        "",
+        f"**Lifecycle:** `{state.lifecycle}`",
+        f"**Current step:** `{state.current_step or '—'}`",
+        f"**Iteration:** {state.iteration_count} / attempt {state.attempt_count}",
+    ]
+    if state.blocked_reason:
+        lines.append(f"**Blocked:** {state.blocked_reason}")
+    lines += [
+        f"**Updated:** {state.updated_at or '—'}",
+        "",
+        "## Step History",
+        "",
+    ]
+    if state.step_history:
+        lines.append("| step | outcome | completed_at |")
+        lines.append("|------|---------|--------------|")
+        for entry in state.step_history:
+            step_id = entry.get("step_id", "?")
+            outcome = entry.get("outcome", "?")
+            completed = entry.get("completed_at", "?")
+            lines.append(f"| {step_id} | {outcome} | {completed} |")
+    else:
+        lines.append("*(no steps completed yet)*")
+    lines.append("")
+
+    content = "\n".join(lines)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    path = output_dir / "progress.md"
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(content, encoding="utf-8")
+    os.replace(tmp, path)
+    return path

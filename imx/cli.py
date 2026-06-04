@@ -42,6 +42,8 @@ def cmd_route(args) -> int:
         risk_tier=args.risk_tier,
         capability_profile=args.profile or None,
         budget_max_cost_usd=args.budget_usd,
+        budget_max_tokens=args.budget_tokens,
+        budget_gate=args.budget_gate,
     )
     result = router.route(req)
     out = {
@@ -80,6 +82,20 @@ def cmd_route_aip(args) -> int:
     }
     _json_out(out)
     return 0 if outcome.result.decision is not None else 1
+
+
+def cmd_approve(args) -> int:
+    from .approvals import write_approval
+
+    path = write_approval(
+        args.task_id,
+        approved=not args.revoke,
+        approver=args.approver,
+        note=args.note or "",
+    )
+    _json_out({"status": "ok", "task_id": args.task_id,
+               "approved": not args.revoke, "path": str(path)})
+    return 0
 
 
 def cmd_observe(args) -> int:
@@ -153,7 +169,7 @@ def cmd_workflow_init(args) -> int:
 
 
 def cmd_workflow_advance(args) -> int:
-    from .workflow import load_state, save_state, advance_workflow, load_definition
+    from .workflow import load_state, save_state, advance_workflow, load_definition, write_progress_md
     import os
 
     state_path = Path(args.state)
@@ -180,6 +196,8 @@ def cmd_workflow_advance(args) -> int:
         task_id=args.task_id or "",
     )
     save_state(new_state, state_path)
+    # Write human-readable progress.md alongside state.json (spec §10.5).
+    write_progress_md(new_state, state_path.parent)
     _json_out(dataclasses.asdict(new_state))
     return 0
 
@@ -285,10 +303,23 @@ def cmd_gate_vote(args) -> int:
 
 
 def cmd_gate_resolve(args) -> int:
-    from .gates import run_vote_and_record
+    from .gates import is_gate_expired, read_gate_file, run_vote_and_record
     import dataclasses
 
     gates_dir = Path(args.gates_dir) if args.gates_dir else (Path.home() / ".imx" / "state" / "gates")
+    # A gate past its TTL has timed out (spec §10.7). A timeout is fail-safe: it
+    # short-circuits resolution and is reported as "expired" rather than being
+    # silently resolved by whatever votes happened to arrive. The caller must
+    # then re-open, escalate, or treat the gate as denied.
+    gate = read_gate_file(args.task_id, args.stage, gates_dir)
+    if gate is not None and is_gate_expired(gate):
+        _json_out({
+            "status": "expired",
+            "task_id": args.task_id,
+            "stage": args.stage,
+            "expired": True,
+        })
+        return 1
     record = run_vote_and_record(args.task_id, args.stage, gates_dir)
     if record is None:
         _json_out({"status": "no_votes", "task_id": args.task_id, "stage": args.stage})
@@ -323,6 +354,42 @@ def cmd_quota_status(args) -> int:
     return 0
 
 
+def cmd_quota_set(args) -> int:
+    from .quota import QuotaStatus, write_quota_status
+    import dataclasses
+
+    quota_dir = Path(args.quota_dir) if args.quota_dir else None
+    status = QuotaStatus(
+        provider=args.provider,
+        checked_at=args.checked_at or "",
+        requests_used=args.requests_used,
+        requests_limit=args.requests_limit,
+        tokens_used=args.tokens_used,
+        tokens_limit=args.tokens_limit,
+        reset_at=args.reset_at or "",
+        status=args.status,
+        pct_used=args.pct_used,
+    )
+    path = write_quota_status(status, quota_dir=quota_dir)
+    _json_out({"written": str(path), "quota": dataclasses.asdict(status)})
+    return 0
+
+
+def cmd_quota_record_cache(args) -> int:
+    from .quota import record_cache_event
+    import dataclasses
+
+    cache_stats_path = Path(args.cache_stats_path) if args.cache_stats_path else None
+    stats = record_cache_event(
+        args.provider,
+        hit=not args.miss,
+        saved_usd=args.saved_usd,
+        path=cache_stats_path,
+    )
+    _json_out(dataclasses.asdict(stats))
+    return 0
+
+
 def _dispatch_workflow(args) -> int:
     sub_handlers = {
         "init": cmd_workflow_init,
@@ -335,9 +402,42 @@ def _dispatch_workflow(args) -> int:
     return handler(args)
 
 
+def cmd_control_intent_ack(args) -> int:
+    from .control_intents import append_control_span, mark_intent_acked
+
+    path = Path(args.intent_path)
+    if not path.exists():
+        print(f"intent file not found: {path}", file=sys.stderr)
+        return 1
+
+    # Build the control span from the intent's own fields (best effort) so the
+    # audit record carries which intent was processed (spec §10.6: "every control
+    # action appends to control_spans.jsonl").
+    span: dict = {"event": "intent_acked", "intent_file": path.name}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        for key in ("intent", "session_id", "task_id", "requested_by"):
+            if data.get(key):
+                span[key] = data[key]
+    except (OSError, json.JSONDecodeError):
+        pass
+    if args.acked_by:
+        span["acked_by"] = args.acked_by
+
+    telemetry_dir = Path(args.telemetry_dir) if args.telemetry_dir else None
+    # Record the span first (the audit record is paramount), then ack the file.
+    append_control_span(span, telemetry_dir=telemetry_dir)
+    mark_intent_acked(path)
+
+    acked_name = path.name.replace(".intent.json", ".intent.acked.json")
+    _json_out({"acked": str(path.parent / acked_name), "span_recorded": True})
+    return 0
+
+
 def _dispatch_control_intent(args) -> int:
     sub_handlers = {
         "write": cmd_control_intent_write,
+        "ack": cmd_control_intent_ack,
     }
     handler = sub_handlers.get(args.ci_command)
     if handler is None:
@@ -384,6 +484,8 @@ def _dispatch_recovery(args) -> int:
 def _dispatch_quota(args) -> int:
     sub_handlers = {
         "status": cmd_quota_status,
+        "set": cmd_quota_set,
+        "record-cache": cmd_quota_record_cache,
     }
     handler = sub_handlers.get(args.quota_command)
     if handler is None:
@@ -408,6 +510,17 @@ def build_parser() -> argparse.ArgumentParser:
     p_route.add_argument("--risk-tier", required=True, choices=["READ_ONLY", "LOCAL", "EXTERNAL"])
     p_route.add_argument("--profile", default=None, metavar="PROFILE")
     p_route.add_argument("--budget-usd", type=float, default=None, metavar="N")
+    p_route.add_argument("--budget-tokens", type=int, default=None, metavar="N")
+    p_route.add_argument("--budget-gate", default="soft", choices=["soft", "hard"],
+                         help="hard denies dispatch when the task budget is exhausted")
+
+    # approve
+    p_approve = sub.add_parser("approve", help="Write an EXTERNAL-tier approval record for a task")
+    p_approve.add_argument("--task-id", required=True, metavar="TASK_ID")
+    p_approve.add_argument("--approver", default="operator", metavar="NAME")
+    p_approve.add_argument("--note", default="", metavar="TEXT")
+    p_approve.add_argument("--revoke", action="store_true",
+                           help="Write a record marking the task as not approved")
 
     p_route_aip = sub.add_parser("route-aip", help="Consume an AIP route request/task packet and write a route decision")
     p_route_aip.add_argument("--workspace", required=True, metavar="DIR",
@@ -439,8 +552,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_scores.add_argument("--scores-path", default=None, metavar="PATH")
 
     # dream-trigger
+    from .telemetry import DREAM_TRIGGER_TYPES
     p_dt = sub.add_parser("dream-trigger", help="Manually emit a dream trigger record")
-    p_dt.add_argument("--type", required=True, metavar="TYPE")
+    p_dt.add_argument("--type", required=True, metavar="TYPE",
+                      choices=sorted(DREAM_TRIGGER_TYPES))
     p_dt.add_argument("--query", default="", metavar="TEXT")
     p_dt.add_argument("--task-id", default=None)
     p_dt.add_argument("--task-class", default=None)
@@ -527,6 +642,29 @@ def build_parser() -> argparse.ArgumentParser:
     p_quota_status.add_argument("--cache-stats-path", default=None, metavar="PATH",
                                 help="Override cache stats file path")
 
+    p_quota_set = quota_sub.add_parser(
+        "set", help="Write/update a provider quota status (consumed by routing)")
+    p_quota_set.add_argument("provider", metavar="PROVIDER")
+    p_quota_set.add_argument("--status", default="ok", choices=["ok", "warning", "exhausted"])
+    p_quota_set.add_argument("--pct-used", dest="pct_used", type=float, default=0.0)
+    p_quota_set.add_argument("--requests-used", dest="requests_used", type=int, default=0)
+    p_quota_set.add_argument("--requests-limit", dest="requests_limit", type=int, default=0)
+    p_quota_set.add_argument("--tokens-used", dest="tokens_used", type=int, default=0)
+    p_quota_set.add_argument("--tokens-limit", dest="tokens_limit", type=int, default=0)
+    p_quota_set.add_argument("--reset-at", dest="reset_at", default=None, metavar="ISO8601")
+    p_quota_set.add_argument("--checked-at", dest="checked_at", default=None, metavar="ISO8601")
+    p_quota_set.add_argument("--quota-dir", default=None, metavar="DIR",
+                             help="Override quota status directory")
+
+    p_quota_cache = quota_sub.add_parser(
+        "record-cache", help="Record a provider cache hit/miss into cache stats")
+    p_quota_cache.add_argument("provider", metavar="PROVIDER")
+    p_quota_cache.add_argument("--miss", action="store_true",
+                               help="Record a cache miss (default records a hit)")
+    p_quota_cache.add_argument("--saved-usd", dest="saved_usd", type=float, default=0.0)
+    p_quota_cache.add_argument("--cache-stats-path", default=None, metavar="PATH",
+                               help="Override cache stats file path")
+
     # correlate
     p_corr = sub.add_parser("correlate", help="Correlate AIP workspace events with route decisions")
     p_corr.add_argument("--workspace", required=True, metavar="DIR",
@@ -549,6 +687,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_ci_write.add_argument("--reason", default=None, metavar="TEXT")
     p_ci_write.add_argument("--target-model-band", default=None, metavar="BAND")
 
+    p_ci_ack = ci_sub.add_parser(
+        "ack", help="Acknowledge a processed control intent and record a control span")
+    p_ci_ack.add_argument("intent_path", metavar="INTENT_FILE",
+                          help="Path to the *.intent.json file that was processed")
+    p_ci_ack.add_argument("--acked-by", default=None, metavar="NODE_ID",
+                          help="node_id of the harness/operator acking the intent")
+    p_ci_ack.add_argument("--telemetry-dir", default=None, metavar="DIR",
+                          help="Override telemetry dir (default: ~/.imx/telemetry)")
+
     return parser
 
 
@@ -558,6 +705,7 @@ def main() -> None:
 
     handlers = {
         "route": cmd_route,
+        "approve": cmd_approve,
         "route-aip": cmd_route_aip,
         "observe": cmd_observe,
         "nodes": cmd_nodes,

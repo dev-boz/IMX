@@ -77,3 +77,18 @@ def test_check_and_apply_drift_persists_to_file(tmp_path):
     # The JSON file must have been updated
     persisted = json.loads(registry_file.read_text())
     assert persisted["node-2"] == "fp-new"
+
+
+def test_load_fingerprint_registry_handles_corrupt_json(tmp_path):
+    path = tmp_path / "harness_fingerprints.json"
+    path.write_text("{not valid json", encoding="utf-8")
+
+    # Corrupt registry must not raise — falls back to empty so observe keeps working.
+    assert load_fingerprint_registry(path) == {}
+
+
+def test_load_fingerprint_registry_handles_non_dict_payload(tmp_path):
+    path = tmp_path / "harness_fingerprints.json"
+    path.write_text(json.dumps(["not", "a", "dict"]), encoding="utf-8")
+
+    assert load_fingerprint_registry(path) == {}

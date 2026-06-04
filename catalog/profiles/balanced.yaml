@@ -33,7 +33,7 @@ approval_required_for:
   - EXTERNAL
 
 exploration:
-  traffic_pct: 10
+  traffic_pct: 0.10
   max_tasks: 20
   max_days: 7
   stop_when_confidence_gte: 0.90

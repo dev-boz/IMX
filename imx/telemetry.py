@@ -6,6 +6,19 @@ from pathlib import Path
 
 DEFAULT_TELEMETRY_DIR = Path.home() / ".imx" / "telemetry"
 
+# Controlled vocabulary for dream trigger records (spec §11.3).
+DREAM_TRIGGER_TYPES = frozenset(
+    {
+        "query_gap",
+        "route_failure",
+        "context_saturation",
+        "large_task_completion",
+        "entrenchment_risk",
+        "procedure_regression",
+        "policy_drift",
+    }
+)
+
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
@@ -39,10 +52,35 @@ def append_route_decision(decision_dict: dict, telemetry_dir: Path | None = None
         os.fsync(f.fileno())
 
 
+def append_gate_decision(record: dict, telemetry_dir: Path | None = None) -> None:
+    """Append a gate/guardrail decision to gate_decisions.jsonl (spec §12.1/§12.6).
+
+    Capability profiles declare ``log_decisions_to: ~/.imx/telemetry/gate_decisions.jsonl``;
+    this is the writer for that audit stream. Records the gate response, the
+    profile applied, and the reason so dispatch decisions are reconstructable
+    from files alone (spec §14.2).
+    """
+    d = telemetry_dir or DEFAULT_TELEMETRY_DIR
+    d.mkdir(parents=True, exist_ok=True)
+    record.setdefault("schema_version", "0.6")
+    record.setdefault("decided_at", _utc_now())
+    line = json.dumps(record, ensure_ascii=True) + "\n"
+    path = d / "gate_decisions.jsonl"
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(line)
+        f.flush()
+        os.fsync(f.fileno())
+
+
 def append_dream_trigger(trigger_type: str, *, source: str = "imx-router",
                           query: str = "", context: dict | None = None,
                           telemetry_dir: Path | None = None) -> None:
     """Write a dream trigger record for gitmem per spec §11.3."""
+    if trigger_type not in DREAM_TRIGGER_TYPES:
+        raise ValueError(
+            f"unknown dream trigger_type {trigger_type!r}; "
+            f"expected one of {sorted(DREAM_TRIGGER_TYPES)}"
+        )
     d = telemetry_dir or (Path.home() / ".imx" / "state")
     d.mkdir(parents=True, exist_ok=True)
     record = {
