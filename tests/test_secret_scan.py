@@ -47,3 +47,25 @@ def test_assert_clean_raises_on_secret():
         assert_clean({"creds": "Bearer abcdefghijklmnop"}, label="task_packet")
     assert exc.value.findings
     assert "task_packet.creds" in str(exc.value)
+
+
+def test_secret_named_key_with_token_value_is_flagged():
+    # The common case: a secret stored as a plain dict value with no inline
+    # key=value context. Must be caught (regression for fail-open hole).
+    findings = scan_object({"env": {"api_key": "AbCd1234EfGh5678"}}, path="task_packet")
+    assert any(f.label == "secret_value" for f in findings)
+    assert any(f.location == "task_packet.env.api_key" for f in findings)
+
+
+def test_secret_named_key_with_prose_value_not_flagged():
+    # A secret-named key whose value is prose (has spaces) is not a token.
+    findings = scan_object({"password_hint": "my dog's name plus year"})
+    assert findings == []
+
+
+def test_openai_key_detected():
+    assert "openai_key" in scan_text("key sk-proj-abcdefghijklmnopqrstuvwx")
+
+
+def test_github_fine_grained_pat_detected():
+    assert "github_token" in scan_text("github_pat_11ABCDEFG0abcdefghijklmno")

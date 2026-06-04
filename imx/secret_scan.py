@@ -17,23 +17,31 @@ _PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     (
         "private_key",
         re.compile(
-            r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----",
-            re.DOTALL,
+            r"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]{0,8192}?-----END [A-Z ]*PRIVATE KEY-----",
         ),
     ),
     ("jwt", re.compile(r"\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b")),
-    ("github_token", re.compile(r"\bgh[opsur]_[A-Za-z0-9]{20,}\b")),
-    ("slack_token", re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}\b")),
+    ("github_token", re.compile(r"\b(?:gh[opsur]_|github_pat_)[A-Za-z0-9_]{20,}\b")),
+    ("slack_token", re.compile(r"\bx(?:ox[baprsce]|app)-[A-Za-z0-9-]{10,}\b")),
     ("aws_access_key", re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
+    ("openai_key", re.compile(r"\bsk-[A-Za-z0-9_-]{20,}\b")),
     ("bearer_token", re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._\-]{12,}")),
     ("authorization_header", re.compile(r"(?i)\bauthorization:\s*\S+")),
     (
         "secret_assignment",
+        # Tolerate a quoted key (e.g. JSON `"api_key": "..."`) before the separator.
         re.compile(
-            r"(?i)\b(api[_-]?key|secret|token|password|passwd|pwd)\s*[:=]\s*['\"]?[^\s'\"]{6,}"
+            r"(?i)\b(api[_-]?key|secret|token|password|passwd|pwd)['\"]?\s*[:=]\s*['\"]?[^\s'\"]{6,}"
         ),
     ),
 ]
+
+# Keys whose string value is treated as a secret regardless of value shape, so a
+# packet field like {"api_key": "AbCd1234EfGh"} is caught even though the value
+# alone carries no key=value context (scan_object scans values in isolation).
+_SECRET_KEY_RE = re.compile(
+    r"(?i)\b(api[_-]?key|secret|token|password|passwd|pwd|access[_-]?key|private[_-]?key)\b"
+)
 
 
 @dataclass(frozen=True)
@@ -73,7 +81,18 @@ def scan_object(obj: object, *, path: str = "<root>") -> list[Finding]:
             findings.append(Finding(label=label, location=path))
     elif isinstance(obj, dict):
         for key, value in obj.items():
-            findings.extend(scan_object(value, path=f"{path}.{key}"))
+            child = f"{path}.{key}"
+            # Key-aware check: a secret-named key whose value is a contiguous
+            # token (no whitespace, length >= 8) is treated as a secret even
+            # though the value string carries no key=value context on its own.
+            if (
+                isinstance(value, str)
+                and _SECRET_KEY_RE.search(str(key))
+                and len(value.strip()) >= 8
+                and not any(c.isspace() for c in value.strip())
+            ):
+                findings.append(Finding(label="secret_value", location=child))
+            findings.extend(scan_object(value, path=child))
     elif isinstance(obj, (list, tuple)):
         for i, value in enumerate(obj):
             findings.extend(scan_object(value, path=f"{path}[{i}]"))
