@@ -528,3 +528,137 @@ def test_mesh_fastpath_bypassed_when_mesh_path_is_none(tmp_path):
     # Normal catalog routing still works
     assert result.decision is not None
     assert len(result.candidate_nodes) >= 1
+
+
+# --- sandbox_required gate (spec §9.2) ---
+
+def _sandbox_catalog(tmp_path: Path) -> Path:
+    """Minimal catalog with one LOCAL node and a sandbox_required profile."""
+    import yaml
+
+    cat = tmp_path / "sandbox_catalog"
+    (cat / "nodes.d").mkdir(parents=True)
+    (cat / "profiles").mkdir()
+    (cat / "task_classes.yaml").write_text(
+        "schema_version: '0.6'\ntask_classes:\n  implementation:\n    description: test\n"
+    )
+    # Node that accepts LOCAL tier and references the sandbox profile
+    node = {
+        "node_id": "sandbox-node",
+        "engine": {"family": "balanced", "provider": "test"},
+        "harness": {},
+        "profile": "sandbox_profile",
+        "policy": {"allowed_risk_tiers": ["READ_ONLY", "LOCAL"]},
+        "notes": "",
+    }
+    (cat / "nodes.d" / "sandbox-node.yaml").write_text(yaml.dump(node))
+    # Profile with sandbox_required: true
+    profile = {
+        "schema_version": "0.6",
+        "profile_id": "sandbox_profile",
+        "risk_tiers": ["READ_ONLY", "LOCAL"],
+        "sandbox_required": True,
+        "allow": ["read_file", "edit_file"],
+        "deny": ["git_push"],
+        "approval_required_for": ["EXTERNAL"],
+    }
+    (cat / "profiles" / "sandbox_profile.yaml").write_text(yaml.dump(profile))
+    return cat
+
+
+def test_sandbox_required_profile_returns_sandbox_gate(tmp_path):
+    """Router emits GateResponse.SANDBOX when the dispatched profile requires sandbox."""
+    cat = _sandbox_catalog(tmp_path)
+    router = ImxRouter(
+        catalog_root=cat,
+        ema_store=EmaStore(path=tmp_path / "scores.json"),
+        telemetry_dir=tmp_path / "telemetry",
+        quota_dir=tmp_path / "quota",
+        budgets_dir=tmp_path / "budgets",
+        approvals_dir=tmp_path / "approvals",
+        demo_dir=tmp_path / "demo",
+    )
+    req = RoutingRequest(
+        task_id="task-sandbox-001",
+        task_class="implementation",
+        risk_tier="LOCAL",
+        capability_profile="sandbox_profile",
+    )
+    result = router.route(req)
+    assert result.decision is not None, f"Expected a decision, got: {result.gate_reason}"
+    assert result.gate_response == GateResponse.SANDBOX
+    assert "sandbox" in result.gate_reason.lower()
+
+
+def test_sandbox_required_audit_takes_precedence_over_sandbox(tmp_path):
+    """EXTERNAL tasks get AUDIT even when the profile also has sandbox_required."""
+    import yaml
+
+    cat = tmp_path / "sandbox_ext_catalog"
+    (cat / "nodes.d").mkdir(parents=True)
+    (cat / "profiles").mkdir()
+    (cat / "task_classes.yaml").write_text(
+        "schema_version: '0.6'\ntask_classes:\n  deployment:\n    description: test\n"
+    )
+    node = {
+        "node_id": "sb-ext-node",
+        "engine": {"family": "frontier", "provider": "test"},
+        "harness": {},
+        "profile": "sb_ext_profile",
+        "policy": {"allowed_risk_tiers": ["READ_ONLY", "LOCAL", "EXTERNAL"]},
+        "notes": "",
+    }
+    (cat / "nodes.d" / "sb-ext-node.yaml").write_text(yaml.dump(node))
+    profile = {
+        "schema_version": "0.6",
+        "profile_id": "sb_ext_profile",
+        "risk_tiers": ["READ_ONLY", "LOCAL", "EXTERNAL"],
+        "sandbox_required": True,
+        "allow": ["read_file", "edit_file", "git_push"],
+        "deny": [],
+        "approval_required_for": [],  # exempt from approval for this test
+    }
+    (cat / "profiles" / "sb_ext_profile.yaml").write_text(yaml.dump(profile))
+
+    # Write approval + demo so EXTERNAL passes the approval gate
+    approvals_dir = tmp_path / "approvals"
+    approvals_dir.mkdir(parents=True, exist_ok=True)
+    import json
+    (approvals_dir / "task-sb-ext-001.json").write_text(
+        json.dumps({"task_id": "task-sb-ext-001", "approved": True, "approver": "op"})
+    )
+    demo_dir = tmp_path / "demo"
+    demo_dir.mkdir(parents=True, exist_ok=True)
+    (demo_dir / "task-sb-ext-001.md").write_text("verified\n")
+
+    router = ImxRouter(
+        catalog_root=cat,
+        ema_store=EmaStore(path=tmp_path / "scores.json"),
+        telemetry_dir=tmp_path / "telemetry",
+        quota_dir=tmp_path / "quota",
+        budgets_dir=tmp_path / "budgets",
+        approvals_dir=approvals_dir,
+        demo_dir=demo_dir,
+    )
+    req = RoutingRequest(
+        task_id="task-sb-ext-001",
+        task_class="deployment",
+        risk_tier="EXTERNAL",
+        capability_profile="sb_ext_profile",
+    )
+    result = router.route(req)
+    # EXTERNAL gate response takes priority; AUDIT wins over SANDBOX
+    assert result.gate_response == GateResponse.AUDIT
+
+
+def test_non_sandbox_profile_returns_allow_not_sandbox(tmp_path):
+    """Normal (non-sandbox_required) profiles still return ALLOW."""
+    router = _make_router(tmp_path)
+    req = RoutingRequest(
+        task_id="task-nosandbox-001",
+        task_class="analysis",
+        risk_tier="READ_ONLY",
+    )
+    result = router.route(req)
+    assert result.gate_response == GateResponse.ALLOW
+    assert result.decision is not None

@@ -5,6 +5,12 @@ approval record at ``~/.imx/state/approvals/{task_id}.json`` and a demo/evidence
 artifact at ``artifacts/demo/{task_id}.md`` before dispatch, unless the governing
 capability profile explicitly exempts EXTERNAL (``approval_required_for`` omits
 it). The router consults these before allowing an EXTERNAL route to dispatch.
+
+HUMANFILE sentinel (spec §12.2): placing a ``HUMANFILE`` in the approvals
+directory or a project root signals that all EXTERNAL-tier actions additionally
+require a human co-signer record (``human_cosigner: true`` in the approval JSON)
+before dispatch proceeds.  Its presence alone is the signal; the file content is
+advisory.
 """
 from __future__ import annotations
 
@@ -17,6 +23,7 @@ logger = logging.getLogger("imx.approvals")
 
 DEFAULT_APPROVALS_DIR = Path.home() / ".imx" / "state" / "approvals"
 DEFAULT_DEMO_DIR = Path.home() / ".imx" / "artifacts" / "demo"
+HUMANFILE_NAME = "HUMANFILE"
 
 
 def approval_path(task_id: str, approvals_dir: Path | None = None) -> Path:
@@ -25,6 +32,16 @@ def approval_path(task_id: str, approvals_dir: Path | None = None) -> Path:
 
 def demo_artifact_path(task_id: str, demo_dir: Path | None = None) -> Path:
     return (demo_dir or DEFAULT_DEMO_DIR) / f"{task_id}.md"
+
+
+def humanfile_present(approvals_dir: Path | None = None) -> bool:
+    """Return True when a HUMANFILE sentinel is present in the approvals directory.
+
+    Presence signals that EXTERNAL dispatch requires an additional human
+    co-signer record (spec §12.2).  The file content is irrelevant.
+    """
+    d = approvals_dir or DEFAULT_APPROVALS_DIR
+    return (d / HUMANFILE_NAME).exists()
 
 
 def read_approval(task_id: str, approvals_dir: Path | None = None) -> dict | None:
@@ -45,18 +62,26 @@ def write_approval(
     approved: bool = True,
     approver: str = "operator",
     note: str = "",
+    human_cosigner: bool = False,
     approvals_dir: Path | None = None,
 ) -> Path:
-    """Write an approval record atomically. Returns the path written."""
+    """Write an approval record atomically. Returns the path written.
+
+    Pass ``human_cosigner=True`` when the operator has personally reviewed
+    and approved the task.  Required when a HUMANFILE sentinel is present
+    in the approvals directory (spec §12.2).
+    """
     d = approvals_dir or DEFAULT_APPROVALS_DIR
     d.mkdir(parents=True, exist_ok=True)
     path = d / f"{task_id}.json"
-    record = {
+    record: dict = {
         "task_id": task_id,
         "approved": approved,
         "approver": approver,
         "note": note,
     }
+    if human_cosigner:
+        record["human_cosigner"] = True
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
     os.replace(tmp, path)
@@ -85,6 +110,10 @@ def check_external_approval(
 
     Requires an approval record with ``approved: true`` AND a demo artifact
     (spec §9, §9.1). Either missing blocks dispatch.
+
+    When a ``HUMANFILE`` sentinel is present in the approvals directory
+    (spec §12.2), the approval record must additionally carry
+    ``human_cosigner: true`` — otherwise dispatch is blocked.
     """
     record = read_approval(task_id, approvals_dir)
     if record is None:
@@ -94,4 +123,11 @@ def check_external_approval(
     demo = demo_artifact_path(task_id, demo_dir)
     if not demo.exists():
         return (False, f"missing demo artifact {demo.name} for EXTERNAL task {task_id}")
+    # HUMANFILE sentinel: require explicit human co-signer field (spec §12.2).
+    if humanfile_present(approvals_dir) and not record.get("human_cosigner", False):
+        return (
+            False,
+            f"HUMANFILE present in approvals dir: task {task_id} requires "
+            f"human_cosigner: true in approval record",
+        )
     return (True, "approval record and demo artifact present")

@@ -34,6 +34,7 @@ from .telemetry import (
 )
 from .cost_routing import rank_nodes_by_cost_adjusted_score
 from .rca import create_rca
+from .harness_drift import append_drift_record, check_and_apply_drift
 
 
 def _utc_now() -> str:
@@ -77,6 +78,8 @@ class ImxRouter:
         budgets_dir: Path | None = None,
         approvals_dir: Path | None = None,
         demo_dir: Path | None = None,
+        fingerprint_registry_path: Path | None = None,
+        drift_reset_factor: float = 0.5,
     ) -> None:
         self.catalog_root = catalog_root
         self.ema = ema_store or EmaStore()
@@ -88,6 +91,9 @@ class ImxRouter:
         self.budgets_dir = budgets_dir
         self.approvals_dir = approvals_dir
         self.demo_dir = demo_dir
+        # Harness-drift registry (spec §6.1): None falls back to the ~/.imx default.
+        self.fingerprint_registry_path = fingerprint_registry_path
+        self.drift_reset_factor = drift_reset_factor
 
     def _load_candidates_from_mesh(self) -> list[NodeDescriptor] | None:
         """Return node descriptors from the compiled mesh, or None if unavailable/stale.
@@ -306,14 +312,23 @@ class ImxRouter:
         # Emit telemetry
         append_route_decision(dataclasses.asdict(decision), self.telemetry_dir)
 
-        # EXTERNAL tier: by this point the approval gate (step 3d) has passed
-        # (approved or profile-exempt), so dispatch is allowed but still flagged
-        # for post-hoc review (spec §9.2 graduated gate responses).
+        # Determine final gate response using the spec §9.2 graduated scale.
+        # Priority: AUDIT (EXTERNAL) > SANDBOX (profile-mandated) > ALLOW.
         gate_response = GateResponse.ALLOW
         gate_reason = "ok"
         if req.risk_tier == "EXTERNAL":
             gate_response = GateResponse.AUDIT
             gate_reason = "EXTERNAL approved or profile-exempt; post-hoc audit required"
+        # spec §9.2: profile may mandate worktree/sandbox isolation — emit SANDBOX
+        # gate response so the dispatcher knows to enforce isolation before execution.
+        gov_profile_for_sandbox = profiles.get(profile_used)
+        if (
+            gov_profile_for_sandbox is not None
+            and getattr(gov_profile_for_sandbox, "sandbox_required", False)
+            and gate_response == GateResponse.ALLOW
+        ):
+            gate_response = GateResponse.SANDBOX
+            gate_reason = f"profile {profile_used} requires sandbox/worktree isolation"
 
         # Persist the gate decision to the audit stream profiles point at via
         # `log_decisions_to` (spec §12.1/§12.6/§14.2).
@@ -349,6 +364,20 @@ class ImxRouter:
         summary_ref: str | None = None,
     ) -> None:
         """Step 7: update EMA scores and record task outcome telemetry."""
+        # Harness drift (spec §6.1): when a node's version_fingerprint changes,
+        # treat it as a drift event and partially reset confidence for that node's
+        # prior-fingerprint scores before recording the new observation.
+        if harness_fingerprint:
+            drift_record = check_and_apply_drift(
+                node_id,
+                harness_fingerprint,
+                self.ema,
+                registry_path=self.fingerprint_registry_path,
+                reset_factor=self.drift_reset_factor,
+            )
+            if drift_record is not None:
+                append_drift_record(drift_record, telemetry_dir=self.telemetry_dir)
+
         # Update EMA
         controllable = controllability in ("controllable", None)
         if outcome == "failed":

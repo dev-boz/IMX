@@ -41,9 +41,12 @@ def load_fingerprint_registry(path: Path | None = None) -> dict[str, str]:
     if not p.exists():
         return {}
     try:
-        return json.loads(p.read_text(encoding="utf-8"))
-    except Exception:
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, ValueError):
+        # Corrupt/partial registry (e.g. crash mid-write) falls back to empty so
+        # the router keeps observing; a non-dict payload is treated the same way.
         return {}
+    return data if isinstance(data, dict) else {}
 
 
 def save_fingerprint_registry(registry: dict[str, str], path: Path | None = None) -> None:
