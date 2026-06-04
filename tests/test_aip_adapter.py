@@ -7,6 +7,8 @@ from pathlib import Path
 import pytest
 
 from imx.aip_adapter import read_task_packet, route_aip_task
+from imx.models import GateResponse
+from imx.secret_scan import SecretFoundError
 
 
 CATALOG = Path(__file__).parent.parent / "catalog"
@@ -105,6 +107,92 @@ def test_read_task_packet_rejects_invalid_schema(tmp_path):
 
     with pytest.raises(ValueError, match="schema validation"):
         read_task_packet(packet_path, catalog_root=CATALOG)
+
+
+def test_read_task_packet_fails_closed_on_secret(tmp_path):
+    packet_path = _write_json(
+        tmp_path / "task.json",
+        _task_packet(instructions="deploy with ghp_abcdefghijklmnopqrstuvwxyz0123456789"),
+    )
+    with pytest.raises(SecretFoundError):
+        read_task_packet(packet_path, catalog_root=CATALOG)
+
+
+def test_read_task_packet_scan_opt_out(tmp_path):
+    packet_path = _write_json(
+        tmp_path / "task.json",
+        _task_packet(instructions="deploy with ghp_abcdefghijklmnopqrstuvwxyz0123456789"),
+    )
+    # scan=False bypasses the fail-closed scan.
+    packet = read_task_packet(packet_path, catalog_root=CATALOG, scan=False)
+    assert packet["task_id"] == "task-001"
+
+
+def test_route_aip_task_denies_packet_with_secret(tmp_path):
+    workspace = tmp_path / "workspace"
+    packet_path = _write_json(
+        workspace / "tasks" / "packets" / "task-sec.json",
+        _task_packet(task_id="task-sec", instructions="token AKIA1234567890ABCDEF"),
+    )
+    _write_json(
+        workspace / "route-requests" / "task-sec.json",
+        {
+            "schema_version": "0.6",
+            "task_id": "task-sec",
+            "task_class": "analysis",
+            "risk_tier": "READ_ONLY",
+            "task_packet_ref": packet_path.relative_to(workspace).as_posix(),
+        },
+    )
+
+    outcome = route_aip_task(workspace, "task-sec", catalog_root=CATALOG, telemetry_dir=tmp_path / "telemetry")
+
+    assert outcome.result.gate_response == GateResponse.DENY
+    assert outcome.decision_path is None
+    assert "secret" in outcome.result.gate_reason.lower()
+    # The denial is audited to gate_decisions.jsonl.
+    gate_log = tmp_path / "telemetry" / "gate_decisions.jsonl"
+    assert gate_log.exists()
+    record = json.loads(gate_log.read_text().splitlines()[-1])
+    assert record["decided_by"] == "imx-secret-scan"
+    assert record["gate_response"] == "DENY"
+
+
+def test_route_aip_task_logs_identity_violations(tmp_path):
+    workspace = tmp_path / "workspace"
+    # relationship=subtask but chain_depth=0, and a denied tool request.
+    packet = _task_packet(
+        task_id="task-id1",
+        relationship="subtask",
+        provenance={"written_by": "architect", "written_at": "2026-05-22T00:00:00Z", "chain_depth": 0},
+        requested_tools=["git_push"],
+    )
+    packet_path = _write_json(workspace / "tasks" / "packets" / "task-id1.json", packet)
+    _write_json(
+        workspace / "route-requests" / "task-id1.json",
+        {
+            "schema_version": "0.6",
+            "task_id": "task-id1",
+            "task_class": "analysis",
+            "risk_tier": "READ_ONLY",
+            "task_packet_ref": packet_path.relative_to(workspace).as_posix(),
+        },
+    )
+
+    outcome = route_aip_task(workspace, "task-id1", catalog_root=CATALOG, telemetry_dir=tmp_path / "telemetry")
+
+    # Routing still succeeds (identity hygiene is a consistency check, not a block).
+    assert outcome.decision_path is not None
+    payload = json.loads(outcome.decision_path.read_text())
+    kinds = {v["kind"] for v in payload["identity_violations"]}
+    assert "chain_depth_not_incremented" in kinds
+    assert "tool_not_permitted" in kinds
+
+    # Violations are audited to gate_decisions.jsonl with decided_by imx-identity.
+    gate_lines = (tmp_path / "telemetry" / "gate_decisions.jsonl").read_text().splitlines()
+    identity_records = [json.loads(line) for line in gate_lines if "imx-identity" in line]
+    assert len(identity_records) >= 2
+    assert all(r["gate_response"] == "AUDIT" for r in identity_records)
 
 
 def test_cli_route_aip_writes_json_result(tmp_path, monkeypatch, capsys):

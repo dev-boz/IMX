@@ -54,6 +54,11 @@
       "type": "string",
       "description": "Profile ID from ~/.imx/catalog/profiles/*.yaml. Governs allowed tools, risk tiers, and guardrails."
     },
+    "requested_tools": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Tools this task expects to use. Checked against the dispatched capability profile during identity-hygiene validation (spec §12.6)."
+    },
     "node_id": {
       "type": "string",
       "description": "Resolved node identifier (engine × harness × profile). Written by the router at dispatch time."

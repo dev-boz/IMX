@@ -4,7 +4,12 @@ from pathlib import Path
 
 import pytest
 
-from imx.telemetry import append_dream_trigger, append_route_decision, append_task_record
+from imx.telemetry import (
+    append_dream_trigger,
+    append_gate_decision,
+    append_route_decision,
+    append_task_record,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -104,13 +109,13 @@ def test_append_route_decision_decided_at_present(tmp_path):
 
 def test_append_dream_trigger_creates_file(tmp_path):
     """append_dream_trigger should create dream-triggers.jsonl in the state dir."""
-    append_dream_trigger("manual", telemetry_dir=tmp_path)
+    append_dream_trigger("query_gap", telemetry_dir=tmp_path)
     assert (tmp_path / "dream-triggers.jsonl").exists()
 
 
 def test_append_dream_trigger_content_is_valid_json(tmp_path):
     """Each dream trigger record must be valid JSON."""
-    append_dream_trigger("scheduled", query="find gaps", telemetry_dir=tmp_path)
+    append_dream_trigger("route_failure", query="find gaps", telemetry_dir=tmp_path)
     lines = (tmp_path / "dream-triggers.jsonl").read_text().splitlines()
     record = json.loads(lines[0])
     assert isinstance(record, dict)
@@ -118,15 +123,15 @@ def test_append_dream_trigger_content_is_valid_json(tmp_path):
 
 def test_append_dream_trigger_trigger_type_preserved(tmp_path):
     """trigger_type field must match the argument passed."""
-    append_dream_trigger("manual_review", telemetry_dir=tmp_path)
+    append_dream_trigger("large_task_completion", telemetry_dir=tmp_path)
     lines = (tmp_path / "dream-triggers.jsonl").read_text().splitlines()
     record = json.loads(lines[0])
-    assert record["trigger_type"] == "manual_review"
+    assert record["trigger_type"] == "large_task_completion"
 
 
 def test_append_dream_trigger_ts_field_present(tmp_path):
     """ts timestamp field must be present and end with Z."""
-    append_dream_trigger("check", telemetry_dir=tmp_path)
+    append_dream_trigger("policy_drift", telemetry_dir=tmp_path)
     lines = (tmp_path / "dream-triggers.jsonl").read_text().splitlines()
     record = json.loads(lines[0])
     assert "ts" in record
@@ -136,7 +141,21 @@ def test_append_dream_trigger_ts_field_present(tmp_path):
 def test_append_dream_trigger_context_stored(tmp_path):
     """context dict must be stored in the record."""
     ctx = {"pr": 42, "branch": "feat-x"}
-    append_dream_trigger("pr_open", context=ctx, telemetry_dir=tmp_path)
+    append_dream_trigger("entrenchment_risk", context=ctx, telemetry_dir=tmp_path)
     lines = (tmp_path / "dream-triggers.jsonl").read_text().splitlines()
     record = json.loads(lines[0])
     assert record["context"] == ctx
+
+
+def test_append_gate_decision_writes_record(tmp_path):
+    """append_gate_decision writes a record with default schema_version/decided_at."""
+    append_gate_decision(
+        {"task_id": "t-1", "gate_response": "DENY", "reason": "policy"},
+        telemetry_dir=tmp_path,
+    )
+    lines = (tmp_path / "gate_decisions.jsonl").read_text().splitlines()
+    record = json.loads(lines[0])
+    assert record["task_id"] == "t-1"
+    assert record["gate_response"] == "DENY"
+    assert record["schema_version"] == "0.6"
+    assert "decided_at" in record

@@ -55,37 +55,57 @@ def read_rca_record(task_id: str, *, rca_dir: Path | None = None) -> RcaRecord |
 
 
 def classify_failure(failure_type: str, error_message: str = "") -> dict:
-    """Classify a failure into controllability, hypothesis, and factors."""
+    """Classify a failure into controllability, hypothesis, and factors.
+
+    ``failure_type`` follows the IMX spec §12.5 taxonomy:
+    ``context_exceeded``, ``capability_gap``, ``quality_failure``,
+    ``refusal``, ``timeout``, ``infrastructure``, ``cascade``.
+    """
     msg = error_message.lower()
 
-    if failure_type == "infrastructure" or any(kw in msg for kw in ("connection", "timeout", "503")):
+    # infrastructure covers API down, quota, network, and tool-unavailable.
+    if failure_type == "infrastructure" or any(
+        kw in msg for kw in ("connection", "network", "quota", "503", "unavailable")
+    ):
         return {
             "controllability": "uncontrollable",
-            "hypothesis": "infrastructure or network failure",
+            "hypothesis": "infrastructure, quota, or network failure",
             "factors": [],
         }
-    if failure_type == "quota_exceeded":
+    if failure_type == "timeout" or "timeout" in msg or "timed out" in msg:
         return {
             "controllability": "uncontrollable",
-            "hypothesis": "quota limit reached",
+            "hypothesis": "wall-clock or lease deadline exceeded",
             "factors": [],
         }
     if failure_type == "cascade":
         return {
             "controllability": "cascade",
-            "hypothesis": "failure propagated from upstream dependency",
+            "hypothesis": "failure propagated from an upstream artifact",
             "factors": [],
         }
-    if failure_type == "model_refusal":
+    if failure_type == "refusal":
         return {
             "controllability": "controllable",
-            "hypothesis": "request violated model safety policy",
+            "hypothesis": "node refused or over-blocked the request",
             "factors": [],
         }
-    if failure_type == "incorrect_output":
+    if failure_type == "quality_failure":
         return {
             "controllability": "controllable",
-            "hypothesis": "model produced incorrect or malformed output",
+            "hypothesis": "output completed but failed the rubric",
+            "factors": [],
+        }
+    if failure_type == "capability_gap":
+        return {
+            "controllability": "controllable",
+            "hypothesis": "node lacks the required skill for this task class",
+            "factors": [],
+        }
+    if failure_type == "context_exceeded":
+        return {
+            "controllability": "controllable",
+            "hypothesis": "node ran out of usable context",
             "factors": [],
         }
     return {

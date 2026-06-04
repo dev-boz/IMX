@@ -12,7 +12,7 @@ class CapabilityBand(str, enum.Enum):
     deep = "deep"
     frontier = "frontier"
     specialist = "specialist"
-    local_trusted = "local_trusted"
+    local_trusted = "local-trusted"
     sandboxed = "sandboxed"
     distilled = "distilled"
 

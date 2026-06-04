@@ -42,6 +42,8 @@ def cmd_route(args) -> int:
         risk_tier=args.risk_tier,
         capability_profile=args.profile or None,
         budget_max_cost_usd=args.budget_usd,
+        budget_max_tokens=args.budget_tokens,
+        budget_gate=args.budget_gate,
     )
     result = router.route(req)
     out = {
@@ -80,6 +82,20 @@ def cmd_route_aip(args) -> int:
     }
     _json_out(out)
     return 0 if outcome.result.decision is not None else 1
+
+
+def cmd_approve(args) -> int:
+    from .approvals import write_approval
+
+    path = write_approval(
+        args.task_id,
+        approved=not args.revoke,
+        approver=args.approver,
+        note=args.note or "",
+    )
+    _json_out({"status": "ok", "task_id": args.task_id,
+               "approved": not args.revoke, "path": str(path)})
+    return 0
 
 
 def cmd_observe(args) -> int:
@@ -408,6 +424,17 @@ def build_parser() -> argparse.ArgumentParser:
     p_route.add_argument("--risk-tier", required=True, choices=["READ_ONLY", "LOCAL", "EXTERNAL"])
     p_route.add_argument("--profile", default=None, metavar="PROFILE")
     p_route.add_argument("--budget-usd", type=float, default=None, metavar="N")
+    p_route.add_argument("--budget-tokens", type=int, default=None, metavar="N")
+    p_route.add_argument("--budget-gate", default="soft", choices=["soft", "hard"],
+                         help="hard denies dispatch when the task budget is exhausted")
+
+    # approve
+    p_approve = sub.add_parser("approve", help="Write an EXTERNAL-tier approval record for a task")
+    p_approve.add_argument("--task-id", required=True, metavar="TASK_ID")
+    p_approve.add_argument("--approver", default="operator", metavar="NAME")
+    p_approve.add_argument("--note", default="", metavar="TEXT")
+    p_approve.add_argument("--revoke", action="store_true",
+                           help="Write a record marking the task as not approved")
 
     p_route_aip = sub.add_parser("route-aip", help="Consume an AIP route request/task packet and write a route decision")
     p_route_aip.add_argument("--workspace", required=True, metavar="DIR",
@@ -439,8 +466,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_scores.add_argument("--scores-path", default=None, metavar="PATH")
 
     # dream-trigger
+    from .telemetry import DREAM_TRIGGER_TYPES
     p_dt = sub.add_parser("dream-trigger", help="Manually emit a dream trigger record")
-    p_dt.add_argument("--type", required=True, metavar="TYPE")
+    p_dt.add_argument("--type", required=True, metavar="TYPE",
+                      choices=sorted(DREAM_TRIGGER_TYPES))
     p_dt.add_argument("--query", default="", metavar="TEXT")
     p_dt.add_argument("--task-id", default=None)
     p_dt.add_argument("--task-class", default=None)
@@ -558,6 +587,7 @@ def main() -> None:
 
     handlers = {
         "route": cmd_route,
+        "approve": cmd_approve,
         "route-aip": cmd_route_aip,
         "observe": cmd_observe,
         "nodes": cmd_nodes,
