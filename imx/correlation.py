@@ -89,7 +89,7 @@ def correlate_events(events: list[dict], route_decisions: list[dict]) -> list[di
     events_by_task: dict[str, list[dict]] = {}
     unkeyed: list[dict] = []
     for event in events:
-        tid = event.get("task")
+        tid = event.get("task_id") or event.get("task")
         if tid:
             events_by_task.setdefault(tid, []).append(event)
         else:
@@ -131,15 +131,24 @@ def correlate_events(events: list[dict], route_decisions: list[dict]) -> list[di
                 delta = (t_end - t_start).total_seconds()
                 duration_ms = int(delta * 1000)
 
-        # Outcome: use status of the last event with a known status
+        # Queue state outranks agent self-reports. A reclaimed/in-progress task
+        # must not inherit an older terminal outcome. Stable sorting preserves
+        # append order for AIP's second-resolution timestamps.
+        queue_events = [ev for ev in sorted_events if ev.get("event") == "task" and ev.get("stage")]
         outcome = "unknown"
         outcome_class = "controllable"
-        for ev in reversed(sorted_events):
-            status = ev.get("status", "")
-            if status:
-                message = ev.get("message", "")
-                outcome, outcome_class = _map_outcome(status, message)
-                break
+        if queue_events:
+            latest = queue_events[-1]
+            status = {"done": "finished", "failed": "failed"}.get(latest["stage"], "")
+            outcome, outcome_class = _map_outcome(status, latest.get("reason", ""))
+        else:
+            # Compatibility with status-only AIP integrations.
+            for ev in reversed(sorted_events):
+                status = ev.get("status", "")
+                if status:
+                    message = ev.get("message", "")
+                    outcome, outcome_class = _map_outcome(status, message)
+                    break
 
         # summary_ref: file field from any export event
         summary_ref: str | None = None
