@@ -140,7 +140,23 @@ def correlate_events(events: list[dict], route_decisions: list[dict]) -> list[di
         if queue_events:
             latest = queue_events[-1]
             status = {"done": "finished", "failed": "failed"}.get(latest["stage"], "")
-            outcome, outcome_class = _map_outcome(status, latest.get("reason", ""))
+            reason = latest.get("reason", "")
+            if status == "failed" and not reason:
+                # Native fail_task has no reason argument. Recover the latest
+                # compatible status before this terminal event, but never cross
+                # a queue transition (claim/requeue/reclaim or older terminal).
+                terminal_index = next(i for i, ev in enumerate(sorted_events) if ev is latest)
+                owner = latest.get("claimed_by")
+                for ev in reversed(sorted_events[:terminal_index]):
+                    if ev.get("event") == "task" and ev.get("stage"):
+                        break
+                    if owner and ev.get("agent") != owner:
+                        continue
+                    if ev.get("status"):
+                        if ev["status"] == "failed":
+                            reason = ev.get("message", "")
+                        break
+            outcome, outcome_class = _map_outcome(status, reason)
         else:
             # Compatibility with status-only AIP integrations.
             for ev in reversed(sorted_events):
